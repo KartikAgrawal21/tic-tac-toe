@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Tic Tac Toe: one file, no build step. Fonts load from Google Fonts; offline it falls back to system fonts. -->
+<title>Tic Tac Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one sheet of graph paper. The board sits left, a score-sheet card sits right,
+   and both stack on phones. Two pens (red X, blue O) and a highlighter carry all the colour. */
+:root {
+  --paper: #eaf0f2;
+  --grid: rgba(46, 96, 128, 0.10);
+  --grid-major: rgba(46, 96, 128, 0.19);
+  --card: #f6f9fa;
+  --edge: #c5d1d6;
+  --edge-strong: #8fa1a9;
+  --ink: #18252d;
+  --muted: #566871;
+  --graphite: #26333b;
+  --x-ink: #cf2e2a;
+  --o-ink: #1b52b0;
+  --hl: #f9e45b;
+  --hl-ink: #18252d;
+  --display: "Gaegu", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  --ui: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12181c;
+    --grid: rgba(140, 190, 220, 0.07);
+    --grid-major: rgba(140, 190, 220, 0.14);
+    --card: #192126;
+    --edge: #2c3a42;
+    --edge-strong: #52666f;
+    --ink: #e6eef1;
+    --muted: #9aaeb8;
+    --graphite: #c8d6dc;
+    --x-ink: #ff6a5c;
+    --o-ink: #6aa2ff;
+    --hl: #6f6421;
+    --hl-ink: #fff6c7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12181c;
+  --grid: rgba(140, 190, 220, 0.07);
+  --grid-major: rgba(140, 190, 220, 0.14);
+  --card: #192126;
+  --edge: #2c3a42;
+  --edge-strong: #52666f;
+  --ink: #e6eef1;
+  --muted: #9aaeb8;
+  --graphite: #c8d6dc;
+  --x-ink: #ff6a5c;
+  --o-ink: #6aa2ff;
+  --hl: #6f6421;
+  --hl-ink: #fff6c7;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  padding-inline: clamp(16px, 4vw, 32px);
+  padding-block: 28px 56px;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  color: var(--ink);
+  font: 400 14px/1.5 var(--ui);
+  -webkit-text-size-adjust: 100%;
+}
+.sheet { max-width: 980px; margin-inline: auto; display: grid; gap: 32px; }
+.sheet > header { display: grid; gap: 12px; }
+h1 {
+  margin: 0;
+  font: 700 clamp(46px, 10vw, 76px)/0.95 var(--display);
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+h1 span {
+  padding-inline: 0.14em;
+  margin-inline: -0.14em;
+  background: linear-gradient(transparent 56%, var(--hl) 56%, var(--hl) 92%, transparent 92%);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.rules { margin: 0; max-width: 46ch; color: var(--muted); }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: clamp(24px, 4vw, 44px);
+  align-items: start;
+}
+.play, .side { min-width: 0; }
+.play { display: grid; gap: 16px; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+.status-block { min-width: 0; }
+.status-row { display: flex; align-items: center; gap: 14px; min-height: 48px; }
+.turn-glyph { flex: none; width: 46px; height: 46px; }
+.turn-glyph:empty { display: none; }
+.status { margin: 0; font: 700 clamp(32px, 7vw, 44px)/1 var(--display); letter-spacing: 0.01em; }
+.subline {
+  margin: 8px 0 0;
+  font: 500 12px/1.4 var(--ui);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dots { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
+.dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--muted);
+  animation: blink 1s infinite ease-in-out both;
+}
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+/* ---- pen strokes ---- */
+.glyph {
+  display: block;
+  fill: none;
+  stroke-width: 6.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+.glyph path { stroke-dasharray: 1 2; stroke-dashoffset: 0; }
+.glyph.x { stroke: var(--x-ink); }
+.glyph.o { stroke: var(--o-ink); }
+.glyph.d { stroke: var(--muted); }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+/* ---- board ---- */
+.frame {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr);
+  grid-template-rows: 1.6em auto;
+  max-width: 520px;
+}
+.axis { color: var(--muted); font: 500 12px/1 var(--ui); letter-spacing: 0.1em; }
+.cols { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; align-items: center; }
+.rows { grid-column: 1; grid-row: 2; display: grid; grid-template-rows: repeat(3, 1fr); justify-items: start; align-items: center; }
+.board { grid-column: 2; grid-row: 2; position: relative; width: 100%; aspect-ratio: 1 / 1; }
+.grid-lines, .highlight {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow: visible; pointer-events: none;
+}
+.grid-lines path { fill: none; stroke: var(--graphite); stroke-width: 5; stroke-linecap: round; }
+.highlight path {
+  fill: none; stroke: var(--hl); stroke-width: 40; stroke-linecap: round;
+  stroke-dasharray: 1 2; stroke-dashoffset: 0;
+}
+.highlight.anim path { animation: draw 0.55s ease-out both; }
+
+.cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+.cell {
+  position: relative; display: grid; place-items: center;
+  padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.cell:focus-visible { outline: 3px solid var(--ink); outline-offset: -10px; border-radius: 8px; }
+.cell.filled, .board[data-lock="1"] .cell { cursor: default; }
+.mark { display: grid; place-items: center; width: 100%; height: 100%; transition: opacity 0.3s; }
+.mark .glyph, .ghost .glyph { width: 84%; height: 84%; }
+.cell.fresh .glyph path { animation: draw 0.26s ease-out both; }
+.cell.fresh .glyph path + path { animation-delay: 0.2s; }
+.board[data-over="win"] .cell:not(.win) .mark { opacity: 0.38; }
+
+.ghost {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.12s;
+}
+@media (hover: hover) {
+  .board[data-turn="X"]:not([data-lock="1"]) .cell:not(.filled):hover .gx,
+  .board[data-turn="O"]:not([data-lock="1"]) .cell:not(.filled):hover .go { opacity: 0.3; }
+}
+.board[data-turn="X"]:not([data-lock="1"]) .cell:not(.filled):focus-visible .gx,
+.board[data-turn="O"]:not([data-lock="1"]) .cell:not(.filled):focus-visible .go { opacity: 0.3; }
+
+/* ---- buttons ---- */
+.actions { display: flex; flex-wrap: wrap; gap: 10px; padding-left: 1.6em; max-width: 520px; }
+.btn {
+  min-height: 44px; padding: 0 18px;
+  font: 600 12px/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--paper); background: var(--ink);
+  border: 1.5px solid var(--ink); border-radius: 3px;
+  cursor: pointer; transition: transform 0.08s, background-color 0.15s;
+}
+.btn:hover { background: var(--graphite); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.btn.ghost { background: transparent; color: var(--ink); }
+.btn.ghost:hover { background: var(--card); }
+.btn.attn { background: var(--hl); color: var(--hl-ink); }
+.btn.attn:hover { background: var(--hl); filter: brightness(0.96); }
+/* ---- score sheet card ---- */
+.side {
+  display: grid; gap: 18px; padding: 20px;
+  background: var(--card); border: 1px solid var(--edge-strong); border-radius: 4px;
+}
+.side > * { min-width: 0; }
+.side > * + * { border-top: 1px dashed var(--edge-strong); padding-top: 18px; }
+.label {
+  margin: 0 0 10px;
+  font: 600 11px/1 var(--ui); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--muted);
+}
+.score { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.score li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; }
+.score .ic { grid-column: 1; grid-row: 1 / span 2; width: 26px; height: 26px; }
+.score .ic .glyph { width: 100%; height: 100%; }
+.score .who { grid-column: 2; grid-row: 1; font: 500 12px/1.2 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; }
+.score .tw { grid-column: 2; grid-row: 2; min-width: 0; }
+.score .num {
+  grid-column: 3; grid-row: 1 / span 2; min-width: 1.2ch; text-align: right;
+  font: 700 40px/1 var(--display); font-variant-numeric: tabular-nums;
+}
+.tally { display: block; height: 22px; max-width: 100%; margin-top: 4px; fill: none; stroke-width: 2.4; stroke-linecap: round; }
+.tally.x { stroke: var(--x-ink); }
+.tally.o { stroke: var(--o-ink); }
+.tally.d { stroke: var(--muted); }
+.tally.empty line { stroke: var(--edge-strong); stroke-width: 1.5; stroke-dasharray: 2 4; }
+
+.controls { display: grid; gap: 16px; }
+.controls .label { margin-bottom: 8px; font-size: 10px; }
+.seg { display: flex; border: 1px solid var(--edge-strong); border-radius: 3px; overflow: hidden; }
+.seg.off { opacity: 0.45; }
+.opt { position: relative; flex: 1 1 0; min-width: 0; }
+.opt + .opt { border-left: 1px solid var(--edge-strong); }
+.opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.opt input:disabled { cursor: not-allowed; }
+.opt span { display: block; padding: 12px 6px; text-align: center; font: 500 13px/1.2 var(--ui); }
+.opt input:checked + span { background: var(--hl); color: var(--hl-ink); font-weight: 600; }
+.opt input:focus-visible + span { outline: 3px solid var(--ink); outline-offset: -3px; }
+
+.log { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 0; padding: 0; list-style: none; }
+.log li {
+  display: inline-flex; gap: 6px; align-items: baseline;
+  padding: 3px 8px; border: 1px solid var(--edge); border-radius: 3px;
+  font: 500 12px/1.4 var(--ui);
+}
+.log li.none { border: 0; padding: 0; color: var(--muted); }
+.log .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log .x { color: var(--x-ink); font-weight: 600; }
+.log .o { color: var(--o-ink); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header>
+    <h1><span>Tic Tac Toe</span></h1>
+    <p class="rules">Three in a row wins. A full board with no line is a cat's game.</p>
+  </header>
+
+  <div class="layout">
+    <section class="play" aria-label="Game">
+      <div class="status-block">
+        <div class="status-row">
+          <span class="turn-glyph" id="turnGlyph" aria-hidden="true"></span>
+          <p class="status"><span id="statusText">Your move</span><span class="dots" id="dots" hidden aria-hidden="true"><i></i><i></i><i></i></span></p>
+        </div>
+        <p class="subline" id="subline"></p>
+      </div>
+
+      <div class="frame">
+        <div class="axis cols" aria-hidden="true"><span>A</span><span>B</span><span>C</span></div>
+        <div class="axis rows" aria-hidden="true"><span>1</span><span>2</span><span>3</span></div>
+        <div class="board" id="board" data-turn="X" data-over="no">
+          <svg class="grid-lines" viewBox="0 0 300 300" aria-hidden="true">
+            <path d="M101 -8 C 97 80, 104 220, 99 308"/>
+            <path d="M199 -6 C 203 90, 196 210, 202 306"/>
+            <path d="M-8 99 C 90 103, 210 96, 308 101"/>
+            <path d="M-6 201 C 80 197, 220 205, 306 199"/>
+          </svg>
+          <svg class="highlight" id="highlight" viewBox="0 0 300 300" aria-hidden="true"><path id="highlightPath" pathLength="1" d=""/></svg>
+          <div class="cells" id="cells" role="group" aria-label="Squares"></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="nextBtn" type="button">Restart round</button>
+        <button class="btn ghost" id="resetBtn" type="button">Reset scores</button>
+      </div>
+      <p class="sr" id="announce" aria-live="polite"></p>
+    </section>
+
+    <aside class="side" aria-label="Score and setup">
+      <section aria-labelledby="scoreLbl">
+        <h2 class="label" id="scoreLbl">Score sheet</h2>
+        <ul class="score" id="score"></ul>
+      </section>
+
+      <section aria-labelledby="setupLbl">
+        <h2 class="label" id="setupLbl">Setup</h2>
+        <div class="controls" id="setup">
+          <div>
+            <p class="label" id="modeLbl">Opponent</p>
+            <div class="seg" role="radiogroup" aria-labelledby="modeLbl">
+              <label class="opt"><input type="radio" name="mode" id="mode-cpu" value="cpu"><span>Computer</span></label>
+              <label class="opt"><input type="radio" name="mode" id="mode-two" value="two"><span>Two players</span></label>
+            </div>
+          </div>
+          <div>
+            <p class="label" id="levelLbl">Level</p>
+            <div class="seg" id="levelSeg" role="radiogroup" aria-labelledby="levelLbl">
+              <label class="opt"><input type="radio" name="level" id="level-easy" value="easy"><span>Easy</span></label>
+              <label class="opt"><input type="radio" name="level" id="level-medium" value="medium"><span>Medium</span></label>
+              <label class="opt"><input type="radio" name="level" id="level-hard" value="hard"><span>Hard</span></label>
+            </div>
+          </div>
+          <div>
+            <p class="label" id="humanLbl">You play</p>
+            <div class="seg" id="humanSeg" role="radiogroup" aria-labelledby="humanLbl">
+              <label class="opt"><input type="radio" name="human" id="human-x" value="X"><span>X</span></label>
+              <label class="opt"><input type="radio" name="human" id="human-o" value="O"><span>O</span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="logLbl">
+        <h2 class="label" id="logLbl">Moves</h2>
+        <ol class="log" id="log"></ol>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+  const COLS = ['A', 'B', 'C'];
+  const LEVELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+  const STORE_KEY = 'tic-tac-toe.v1';
+
+  const X_SVG = '<svg class="glyph x" viewBox="0 0 100 100" aria-hidden="true"><path pathLength="1" d="M24 23 C 40 41, 58 59, 77 78"/><path pathLength="1" d="M77 21 C 60 41, 42 60, 22 77"/></svg>';
+  const O_SVG = '<svg class="glyph o" viewBox="0 0 100 100" aria-hidden="true"><path pathLength="1" d="M54 19 C 79 19, 85 45, 78 64 C 71 84, 37 89, 25 68 C 14 48, 27 22, 57 21"/></svg>';
+  const EQ_SVG = '<svg class="glyph d" viewBox="0 0 100 100" aria-hidden="true"><path pathLength="1" d="M22 38 C 40 35, 60 41, 78 37"/><path pathLength="1" d="M22 64 C 40 61, 60 67, 78 63"/></svg>';
+  const glyph = (m) => (m === 'X' ? X_SVG : m === 'O' ? O_SVG : '');
+  const other = (m) => (m === 'X' ? 'O' : 'X');
+  const coord = (i) => COLS[i % 3] + (Math.floor(i / 3) + 1);
+
+  // ---------- rules ----------
+  const emptyBoard = () => Array(9).fill('');
+  const emptyCells = (b) => b.reduce((a, v, i) => (v ? a : (a.push(i), a)), []);
+  function findWinner(b) {
+    for (const l of LINES) {
+      if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return { mark: b[l[0]], line: l };
+    }
+    return null;
+  }
+
+  // ---------- computer opponent ----------
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+  function winningMove(b, mark) {
+    for (const i of emptyCells(b)) {
+      b[i] = mark;
+      const w = findWinner(b);
+      b[i] = '';
+      if (w) return i;
+    }
+    return -1;
+  }
+
+  // Full-depth minimax: prefers quick wins and slow losses, picks randomly among equal moves.
+  function minimaxMove(b, me) {
+    const memo = new Map();
+    const score = (bd, turn, depth) => {
+      const w = findWinner(bd);
+      if (w) return w.mark === me ? 10 - depth : depth - 10;
+      const free = emptyCells(bd);
+      if (!free.length) return 0;
+      const key = bd.join('|') + turn;
+      if (memo.has(key)) return memo.get(key);
+      let best = turn === me ? -Infinity : Infinity;
+      for (const i of free) {
+        bd[i] = turn;
+        const s = score(bd, other(turn), depth + 1);
+        bd[i] = '';
+        best = turn === me ? Math.max(best, s) : Math.min(best, s);
+      }
+      memo.set(key, best);
+      return best;
+    };
+    let top = -Infinity;
+    let tied = [];
+    for (const i of emptyCells(b)) {
+      b[i] = me;
+      const s = score(b, other(me), 1);
+      b[i] = '';
+      if (s > top) { top = s; tied = [i]; } else if (s === top) tied.push(i);
+    }
+    return pick(tied);
+  }
+
+  // easy: random. medium: takes a win, blocks a loss, otherwise random. hard: never loses.
+  function chooseMove(board, me, level) {
+    const b = board.slice();
+    const free = emptyCells(b);
+    if (level === 'easy') return pick(free);
+    if (level === 'medium') {
+      let m = winningMove(b, me);
+      if (m < 0) m = winningMove(b, other(me));
+      return m >= 0 ? m : pick(free);
+    }
+    if (free.length === 9) return pick([0, 2, 4, 6, 8]);
+    return minimaxMove(b, me);
+  }
+
+  // ---------- state ----------
+  const newState = () => ({
+    board: emptyBoard(), turn: 'X', first: 'X', over: false, result: null, line: null,
+    log: [], round: 1, scores: { X: 0, O: 0, D: 0 },
+    mode: 'cpu', level: 'medium', human: 'X',
+  });
+  let state = newState();
+  let thinking = false;
+  let gen = 0;
+  let timer = 0;
+  let freshIdx = -1;
+
+  const readPrefs = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { return {}; } };
+  const save = () => {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ mode: state.mode, level: state.level, human: state.human, scores: state.scores }));
+    } catch (e) { /* storage can be blocked; the game still works */ }
+  };
+  function withPrefs(s, p) {
+    if (p.mode === 'cpu' || p.mode === 'two') s.mode = p.mode;
+    if (['easy', 'medium', 'hard'].includes(p.level)) s.level = p.level;
+    if (p.human === 'X' || p.human === 'O') s.human = p.human;
+    const sc = p.scores;
+    if (sc && [sc.X, sc.O, sc.D].every((n) => Number.isInteger(n) && n >= 0 && n < 1000)) s.scores = { X: sc.X, O: sc.O, D: sc.D };
+    return s;
+  }
+  function isValid(s) {
+    return !!s && Array.isArray(s.board) && s.board.length === 9
+      && s.board.every((v) => v === '' || v === 'X' || v === 'O')
+      && (s.turn === 'X' || s.turn === 'O') && (s.first === 'X' || s.first === 'O')
+      && (s.mode === 'cpu' || s.mode === 'two') && ['easy', 'medium', 'hard'].includes(s.level)
+      && (s.human === 'X' || s.human === 'O') && Array.isArray(s.log) && Number.isInteger(s.round)
+      && !!s.scores && [s.scores.X, s.scores.O, s.scores.D].every(Number.isInteger);
+  }
+  function normalise(s) {
+    const w = findWinner(s.board);
+    s.over = !!w || emptyCells(s.board).length === 0;
+    s.result = w ? w.mark : (s.over ? 'draw' : null);
+    s.line = w ? w.line : null;
+    return s;
+  }
+
+  // ---------- game flow ----------
+  const humanTurn = () => state.mode === 'two' || state.turn === state.human;
+  const locked = () => state.over || thinking || !humanTurn();
+  const names = () => (state.mode === 'cpu'
+    ? (state.human === 'X' ? { X: 'You', O: 'Computer' } : { X: 'Computer', O: 'You' })
+    : { X: 'Player X', O: 'Player O' });
+
+  function statusText() {
+    if (state.over) {
+      if (state.result === 'draw') return "Cat's game";
+      if (state.mode === 'cpu') return state.result === state.human ? 'You win' : 'Computer wins';
+      return state.result + ' wins';
+    }
+    if (state.mode === 'cpu') return state.turn === state.human ? 'Your move' : "Computer's move";
+    return state.turn + "'s move";
+  }
+
+  function place(i) {
+    const mark = state.turn;
+    state.board[i] = mark;
+    state.log.push({ mark, idx: i });
+    const w = findWinner(state.board);
+    if (w) {
+      state.over = true; state.result = w.mark; state.line = w.line; state.scores[w.mark] += 1;
+    } else if (!emptyCells(state.board).length) {
+      state.over = true; state.result = 'draw'; state.scores.D += 1;
+    } else {
+      state.turn = other(mark);
+    }
+    freshIdx = i;
+    return mark + ' played ' + coord(i) + '. ' + statusText() + '.';
+  }
+
+  function queueComputer() {
+    if (state.over || state.mode !== 'cpu' || state.turn === state.human) return;
+    const token = ++gen;
+    thinking = true;
+    render();
+    timer = setTimeout(() => {
+      if (token !== gen) return;
+      thinking = false;
+      const note = place(chooseMove(state.board, state.turn, state.level));
+      render(note);
+      save();
+    }, 350 + Math.random() * 350);
+  }
+
+  function onCell(i) {
+    if (locked() || state.board[i]) return;
+    const note = place(i);
+    render(note);
+    save();
+    queueComputer();
+  }
+
+  function clearBoard() {
+    clearTimeout(timer);
+    gen += 1;
+    thinking = false;
+    state.board = emptyBoard(); state.turn = state.first;
+    state.over = false; state.result = null; state.line = null; state.log = [];
+    freshIdx = -1;
+  }
+  function startRound() {
+    if (state.over) { state.first = other(state.first); state.round += 1; }
+    clearBoard();
+    render('New round. ' + statusText() + '.');
+    save();
+    queueComputer();
+  }
+  function resetAll() {
+    state.scores = { X: 0, O: 0, D: 0 }; state.first = 'X'; state.round = 1;
+    clearBoard();
+    render('Scores cleared. ' + statusText() + '.');
+    save();
+    queueComputer();
+  }
+  function setOption(key, value) {
+    if (state[key] === value) return;
+    state[key] = value;
+    if (key === 'level') startRound(); else resetAll();
+  }
+  // ---------- rendering ----------
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    board: $('board'), cells: $('cells'), statusText: $('statusText'), dots: $('dots'), sub: $('subline'),
+    glyph: $('turnGlyph'), announce: $('announce'), score: $('score'), log: $('log'),
+    next: $('nextBtn'), reset: $('resetBtn'), hl: $('highlight'), hlPath: $('highlightPath'), setup: $('setup'),
+  };
+  const radios = {
+    mode: [...document.querySelectorAll('input[name="mode"]')],
+    level: [...document.querySelectorAll('input[name="level"]')],
+    human: [...document.querySelectorAll('input[name="human"]')],
+  };
+  const cells = [];
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cell';
+    b.dataset.i = String(i);
+    b.innerHTML = '<span class="mark"></span><span class="ghost gx">' + X_SVG + '</span><span class="ghost go">' + O_SVG + '</span>';
+    el.cells.appendChild(b);
+    cells.push(b);
+  }
+
+  // Tally marks: four strokes and a slash per group of five.
+  function tally(n, cls) {
+    if (!n) return '<svg class="tally empty" viewBox="0 0 34 22" width="34" height="22" aria-hidden="true"><line x1="2" y1="19" x2="32" y2="19"/></svg>';
+    const shown = Math.min(n, 30);
+    const groups = Math.ceil(shown / 5);
+    const jit = [0.5, -0.6, 0.4, -0.4];
+    let out = '';
+    for (let g = 0; g < groups; g++) {
+      const x0 = g * 34;
+      const count = Math.min(5, shown - g * 5);
+      for (let k = 0; k < Math.min(count, 4); k++) {
+        const x = x0 + 4 + k * 7;
+        out += '<line x1="' + x + '" y1="2" x2="' + (x + jit[k]) + '" y2="20"/>';
+      }
+      if (count === 5) out += '<line x1="' + (x0 + 0.5) + '" y1="17" x2="' + (x0 + 28) + '" y2="5"/>';
+    }
+    const w = groups * 34 - 5;
+    return '<svg class="tally ' + cls + '" viewBox="0 0 ' + w + ' 22" width="' + w + '" height="22" aria-hidden="true">' + out + '</svg>';
+  }
+
+  let lastLine = '';
+  let still = false;
+  function renderHighlight() {
+    const key = state.over && state.line ? state.line.join('') : '';
+    if (key === lastLine) return;
+    lastLine = key;
+    el.hl.classList.remove('anim');
+    if (!key) { el.hlPath.setAttribute('d', ''); return; }
+    const a = state.line[0];
+    const c = state.line[2];
+    const ax = (a % 3) * 100 + 50, ay = Math.floor(a / 3) * 100 + 50;
+    const cx = (c % 3) * 100 + 50, cy = Math.floor(c / 3) * 100 + 50;
+    const len = Math.hypot(cx - ax, cy - ay);
+    const ux = (cx - ax) / len, uy = (cy - ay) / len, pad = 20;
+    const x1 = ax - ux * pad, y1 = ay - uy * pad, x2 = cx + ux * pad, y2 = cy + uy * pad;
+    const mx = (x1 + x2) / 2 - uy * 4, my = (y1 + y2) / 2 + ux * 4;
+    el.hlPath.setAttribute('d', 'M' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Q' + mx.toFixed(1) + ' ' + my.toFixed(1) + ' ' + x2.toFixed(1) + ' ' + y2.toFixed(1));
+    if (!still) el.hl.classList.add('anim');
+  }
+
+  function render(message) {
+    const over = state.over;
+    const win = over && state.line ? state.line : [];
+    const lock = locked();
+    el.board.dataset.turn = state.turn;
+    el.board.dataset.over = over ? (state.result === 'draw' ? 'draw' : 'win') : 'no';
+    el.board.dataset.lock = lock ? '1' : '';
+
+    cells.forEach((btn, i) => {
+      const m = state.board[i];
+      if (btn.dataset.mark !== m) {
+        btn.dataset.mark = m;
+        btn.firstChild.innerHTML = glyph(m);
+      }
+      btn.classList.toggle('filled', !!m);
+      btn.classList.toggle('win', win.includes(i));
+      btn.classList.toggle('fresh', i === freshIdx && !!m);
+      btn.setAttribute('aria-disabled', !m && !lock ? 'false' : 'true');
+      btn.setAttribute('aria-label', coord(i) + ', ' + (m || 'empty') + (win.includes(i) ? ', winning line' : ''));
+    });
+
+    el.statusText.textContent = statusText();
+    el.dots.hidden = !thinking;
+    el.glyph.innerHTML = over ? (state.result === 'draw' ? '' : glyph(state.result)) : glyph(state.turn);
+    el.sub.textContent = 'Round ' + state.round + ' · ' + state.first + ' opens' + (state.mode === 'cpu' ? ' · ' + LEVELS[state.level] : '');
+    el.next.textContent = over ? 'Next round' : 'Restart round';
+    el.next.classList.toggle('attn', over);
+
+    const n = names();
+    const rows = [['X', n.X, state.scores.X], ['O', n.O, state.scores.O], ['D', "Cat's game", state.scores.D]];
+    el.score.innerHTML = rows.map((r) =>
+      '<li><span class="ic">' + (r[0] === 'D' ? EQ_SVG : glyph(r[0])) + '</span><span class="who">' + r[1] + '</span>'
+      + '<span class="tw">' + tally(r[2], r[0].toLowerCase()) + '</span><b class="num">' + r[2] + '</b></li>').join('');
+
+    el.log.innerHTML = state.log.length
+      ? state.log.map((e, k) => '<li><span class="n">' + (k + 1) + '</span><span class="' + e.mark.toLowerCase() + '">' + e.mark + '</span><span>' + coord(e.idx) + '</span></li>').join('')
+      : '<li class="none">No moves yet. Pick a square.</li>';
+
+    const cpu = state.mode === 'cpu';
+    Object.keys(radios).forEach((key) => radios[key].forEach((r) => { r.checked = r.value === state[key]; }));
+    ['level', 'human'].forEach((key) => {
+      radios[key].forEach((r) => { r.disabled = !cpu; });
+      radios[key][0].closest('.seg').classList.toggle('off', !cpu);
+    });
+
+    renderHighlight();
+    if (message) el.announce.textContent = message;
+  }
+
+  // ---------- input ----------
+  el.cells.addEventListener('click', (e) => {
+    const b = e.target.closest('.cell');
+    if (b) onCell(Number(b.dataset.i));
+  });
+  el.cells.addEventListener('keydown', (e) => {
+    const i = cells.indexOf(document.activeElement);
+    const step = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+    if (i < 0 || !step) return;
+    e.preventDefault();
+    const r = Math.min(2, Math.max(0, Math.floor(i / 3) + step[0]));
+    const c = Math.min(2, Math.max(0, (i % 3) + step[1]));
+    cells[r * 3 + c].focus();
+  });
+  el.next.addEventListener('click', () => startRound());
+  el.reset.addEventListener('click', () => resetAll());
+  el.setup.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && radios[t.name] && t.checked) setOption(t.name, t.value);
+  });
+
+  // ---------- boot ----------
+  function start(data) {
+    const saved = data && data.state;
+    state = isValid(saved) ? normalise(saved) : withPrefs(newState(), readPrefs());
+    still = true;
+    render();
+    still = false;
+    queueComputer();
+  }
+
+  try {
+    const hot = window.claude && window.claude.hot;
+    if (hot && typeof hot.snapshot === 'function') hot.snapshot(() => ({ state: JSON.parse(JSON.stringify(state)) }));
+    if (hot && typeof hot.ready === 'function') hot.ready(start); else start((hot && hot.data) || {});
+  } catch (err) {
+    start({});
+  }
+})();
+</script>
+</body>
+</html>
